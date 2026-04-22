@@ -1,0 +1,203 @@
+/*
+ * static/css/style.css — Override e componenti custom su Bootstrap 5
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Bootstrap copre layout, bottoni, form, alert, badge e grid.
+ * Questo file aggiunge SOLO:
+ *   1. Variabili CSS del brand (colori NomadCash)
+ *   2. Override Bootstrap per applicare i colori green/orange del brand
+ *   3. Componenti non coperti da Bootstrap:
+ *        - Navbar gradiente
+ *        - Trip Banner
+ *        - Expense Item (lista spese)
+ *        - Participant Item (lista partecipanti)
+ *        - Badge custom (Saldato, Admin)
+ */
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   1. CSS CUSTOM PROPERTIES (Design Tokens del brand)
+───────────────────────────────────────────────────────────────────────────── */
+:root {
+    --primary-green:    #0ba360;
+    --secondary-green:  #3cba92;
+    --dark-green:       #076d40;
+    --primary-orange:   #f97316;
+    --dark-orange:      #ea580c;
+    --bg-color:         #f4f7f6;
+    --shadow:           0 4px 15px rgba(0,0,0,0.06);
+    --radius:           12px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   2. OVERRIDE BOOTSTRAP — Font e body
+───────────────────────────────────────────────────────────────────────────── */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+}
+
+/* Override del colore Bootstrap primary → verde brand */
+.btn-primary, .btn-success {
+    --bs-btn-bg:            var(--primary-green);
+    --bs-btn-border-color:  var(--primary-green);
+    --bs-btn-hover-bg:      var(--dark-green);
+    --bs-btn-hover-border-color: var(--dark-green);
+    --bs-btn-active-bg:     var(--dark-green);
+}
+
+/* Micro-animazione hover su tutti i bottoni (come nel design originale) */
+.btn {
+    transition: all 0.25s ease;
+}
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+}
+
+/* Card: aggiunge bordo superiore colorato verde brand */
+.card {
+    border-top: 4px solid var(--primary-green);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+}
+
+/* Titolo card: testo verde brand, separatore sottile */
+.card-title {
+    color: var(--primary-green);
+    font-size: 1.4rem;
+    font-weight: 700;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.6rem;
+    margin-bottom: 1.2rem;
+}
+
+/* Alert con bordo sinistro colorato (stile identico al design originale) */
+.alert-success { border-left: 4px solid #28a745; }
+.alert-danger  { border-left: 4px solid #dc3545; }
+.alert-warning { border-left: 4px solid #ffc107; }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   3. NAVBAR — Gradiente custom (Bootstrap non supporta gradienti nativamente)
+───────────────────────────────────────────────────────────────────────────── */
+.navbar {
+    background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-green) 100%) !important;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   4. TRIP BANNER — Componente unico non coperto da Bootstrap
+───────────────────────────────────────────────────────────────────────────── */
+.trip-banner {
+    background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-green) 100%);
+    color: white;
+    padding: 2rem;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 2rem;
+}
+
+/* Variante admin: gradiente blue-steel con accento arancione */
+.trip-banner.admin-mode {
+    background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+    border-top: 4px solid var(--primary-orange);
+}
+
+/* Pill colorata con il ruolo (es. "🎯 Admin Control") */
+.trip-badge {
+    background-color: var(--primary-orange);
+    color: white;
+    padding: 0.3rem 0.9rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    display: inline-block;
+    margin-bottom: 0.8rem;
+}
+
+/* Box monocromatico per il codice invito */
+.invite-code {
+    background: rgba(0,0,0,0.2);
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 1.15rem;
+    display: inline-block;
+    margin-top: 0.8rem;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   5. EXPENSE ITEM — Riga singola nella lista spese
+───────────────────────────────────────────────────────────────────────────── */
+.expense-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.9rem 1rem;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    margin-bottom: 0.7rem;
+    background-color: #fafafa;
+    border-left: 4px solid #cbd5e1; /* Grigio-blu per le spese degli altri */
+}
+
+/* Evidenzia le spese dell'utente loggato con il verde brand */
+.expense-item.is-me {
+    border-left-color: var(--primary-green);
+    background-color: #fff;
+}
+
+.expense-item .exp-title {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.15rem;
+}
+
+.expense-item .exp-meta {
+    font-size: 0.82rem;
+    color: #6c757d; /* text-muted di Bootstrap */
+}
+
+.expense-item .exp-amount {
+    font-size: 1.2rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    white-space: nowrap;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   6. PARTICIPANT ITEM — Riga singola nella lista partecipanti
+───────────────────────────────────────────────────────────────────────────── */
+.part-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.part-item:last-child { border-bottom: none; }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   7. BADGE CUSTOM (non rimpiazzati da Bootstrap perché hanno stile specifico)
+───────────────────────────────────────────────────────────────────────────── */
+/* Badge "Saldato ✅" — appare accanto all'importo di una spesa chiusa */
+.badge-paid {
+    background-color: var(--primary-green);
+    color: white;
+    font-size: 0.68rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 10px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}

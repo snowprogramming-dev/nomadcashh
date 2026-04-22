@@ -1,0 +1,382 @@
+{# ============================================================================
+auth.html — Pagina di login e registrazione
+============================================================================
+Mostrata quando l'utente NON è in sessione (session["user"] assente).
+Contiene DUE form distinti nella stessa pagina:
+1. "Accedi" → login via email (nessuna password — sistema semplificato)
+2. "Registrati" → creazione nuovo account
+
+Entrambi i form inviano POST a "/" (route index() in app.py).
+Il campo nascosto `action` ("login" o "register") discrimina le due azioni.
+
+Stili: la classe CSS "auth-container" centra le due card affiancate.
+============================================================================ #}
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nomadcash - Login</title>
+
+    <!-- Font Inter da Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap Icons — stesso set usato nel resto dell'app -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+    <style>
+        /* --- VARIABILI GLOBALI (Design Tokens) --- 
+           Definiamo i colori principali qui per poterli cambiare facilmente in tutto il documento.
+           Verde per la crescita, Arancione per l'energia, Bianco/Slate per la pulizia.
+        */
+        :root {
+            --primary-green: #22c55e;
+            --primary-orange: #f97316;
+            --dark-green: #166534;
+            --bg-white: #f8fafc;
+            --text-dark: #1e293b;
+            --card-bg: #ffffff;
+        }
+
+        /* --- RESET E IMPOSTAZIONI BASE --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-white);
+            /* Gradiente radiale leggero per dare profondità allo sfondo usando i colori del brand */
+            background-image:
+                radial-gradient(at 0% 0%, rgba(34, 197, 94, 0.05) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(249, 115, 22, 0.05) 0px, transparent 50%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+
+        /* --- WRAPPER PRINCIPALE --- 
+           Contiene tutto il blocco di autenticazione e gestisce l'animazione di entrata.
+        */
+        .auth-wrapper {
+            width: 100%;
+            max-width: 450px;
+            padding: 20px;
+            animation: fadeIn 0.6s ease-out;
+            /* Effetto apparizione fluida */
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- BRANDING (LOGO E NOME) --- */
+        .brand-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .brand-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        /* Icona stilizzata con gradiente verde-arancio */
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-orange));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+        }
+
+        .brand-name {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            letter-spacing: -0.5px;
+        }
+
+        .brand-name span {
+            color: var(--primary-green);
+        }
+
+        /* --- STILE DELLA CARD --- 
+           Il contenitore bianco che ospita i moduli di login e registrazione.
+        */
+        .auth-card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-dark);
+        }
+
+        .card-subtitle {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-bottom: 2rem;
+        }
+
+        /* --- STILE DEI CAMPI DI INPUT --- */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #475569;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        /* Feedback visivo quando l'utente clicca nel campo */
+        .form-control:focus {
+            border-color: var(--primary-green);
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.1);
+        }
+
+        /* --- BOTTONI --- */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* Bottone Login (Verde) */
+        .btn-login {
+            background-color: var(--primary-green);
+            color: white;
+        }
+
+        .btn-login:hover {
+            background-color: var(--dark-green);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(34, 197, 94, 0.3);
+        }
+
+        /* Bottone Registrazione (Arancione) */
+        .btn-register {
+            background-color: var(--primary-orange);
+            color: white;
+        }
+
+        .btn-register:hover {
+            background-color: #ea580c;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(249, 115, 22, 0.3);
+        }
+
+        /* --- LOGICA DI SWAP (TOGGLE) --- 
+           Gestisce la visualizzazione alternata tra i due moduli.
+        */
+        .toggle-container {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .toggle-link {
+            color: var(--primary-green);
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Classe helper per nascondere gli elementi non attivi */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    {# Flash messages — mostrati sopra il form (es. "Utente non trovato", "Account creato")
+    NOTA: il {% if %} è FUORI dall'attributo style per evitare falsi errori del linter CSS. #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div style="position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%);
+                z-index: 9999; width: 90%; max-width: 420px; display: flex;
+                flex-direction: column; gap: 0.5rem;">
+        {% for category, message in messages %}
+        {% if category == 'success' %}
+        <div style="padding: 0.9rem 1.2rem; border-radius: 12px; font-size: 0.9rem;
+                        font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        background: #d4edda; color: #155724; border-left: 4px solid #28a745;">
+            {{ message }}
+        </div>
+        {% elif category == 'danger' %}
+        <div style="padding: 0.9rem 1.2rem; border-radius: 12px; font-size: 0.9rem;
+                        font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545;">
+            {{ message }}
+        </div>
+        {% else %}
+        <div style="padding: 0.9rem 1.2rem; border-radius: 12px; font-size: 0.9rem;
+                        font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        background: #fff3cd; color: #856404; border-left: 4px solid #ffc107;">
+            {{ message }}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+
+    <div class="auth-wrapper">
+        <!-- Header con Logo e Nome del Sito -->
+        <header class="brand-header">
+            <div class="brand-logo">
+                <div class="logo-icon">N</div>
+                <h1 class="brand-name">Nomad<span>cash</span></h1>
+            </div>
+        </header>
+
+        <div class="auth-card">
+
+            <!-- SEZIONE LOGIN (Visibile di default) -->
+            <div id="login-section">
+                <h2 class="card-title">Bentornato</h2>
+                <p class="card-subtitle">Inserisci le tue credenziali per accedere.</p>
+
+                <form method="POST" action="/">
+                    <!-- Campo hidden per istruire Flask sull'azione da compiere -->
+                    <input type="hidden" name="action" value="login">
+
+                    <div class="form-group">
+                        <label class="form-label">Indirizzo Email</label>
+                        <input type="email" name="email" class="form-control" required placeholder="nome@esempio.com">
+                    </div>
+
+                    <button type="submit" class="btn btn-login">
+                        Accedi ora
+                        <!-- Icona di login (Login Box) -->
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                            <polyline points="10 17 15 12 10 7" />
+                            <line x1="15" y1="12" x2="3" y2="12" />
+                        </svg>
+                    </button>
+                </form>
+
+                <div class="toggle-container">
+                    Non hai un account? <span class="toggle-link" onclick="toggleAuth()">Registrati gratuitamente</span>
+                </div>
+            </div>
+
+            <!-- SEZIONE REGISTRAZIONE (Nascosta di default tramite classe .hidden) -->
+            <div id="register-section" class="hidden">
+                <h2 class="card-title">Inizia il viaggio</h2>
+                <p class="card-subtitle">Crea il tuo profilo Nomadcash in pochi secondi.</p>
+
+                <form method="POST" action="/">
+                    <!-- Campo hidden per istruire Flask sull'azione da compiere -->
+                    <input type="hidden" name="action" value="register">
+
+                    <div class="form-group">
+                        <label class="form-label">Email Professionale</label>
+                        <input type="email" name="email" class="form-control" required placeholder="La tua email">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Come ti chiami?</label>
+                        <input type="text" name="nome" class="form-control" required placeholder="Es. Mario">
+                    </div>
+
+                    <button type="submit" class="btn btn-register">
+                        Crea Account
+                        <!-- Icona utente con segno più -->
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="8.5" cy="7" r="4" />
+                            <line x1="20" y1="8" x2="20" y2="14" />
+                            <line x1="23" y1="11" x2="17" y2="11" />
+                        </svg>
+                    </button>
+                </form>
+
+                <div class="toggle-container">
+                    Hai già un account? <span class="toggle-link" onclick="toggleAuth()">Torna al login</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Funzione per alternare la visualizzazione tra Login e Registrazione.
+         * Funziona aggiungendo/rimuovendo la classe CSS 'hidden'.
+         */
+        function toggleAuth() {
+            const loginSec = document.getElementById('login-section');
+            const registerSec = document.getElementById('register-section');
+
+            // Se il login è nascosto, mostralo e nascondi la registrazione, e viceversa.
+            if (loginSec.classList.contains('hidden')) {
+                loginSec.classList.remove('hidden');
+                registerSec.classList.add('hidden');
+            } else {
+                loginSec.classList.add('hidden');
+                registerSec.classList.remove('hidden');
+            }
+        }
+    </script>
+
+</body>
+
+</html>

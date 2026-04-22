@@ -1,0 +1,92 @@
+{# ============================================================================
+   dashboard_no_trip.html — Dashboard senza viaggio attivo (con Bootstrap 5)
+   ============================================================================
+   Mostrata quando l'utente loggato non partecipa a nessun viaggio attivo.
+   Layout: due card affiancate con Bootstrap .row / .col-md-6
+       - Crea un nuovo viaggio → POST /dashboard/create_trip
+       - Unisciti a un viaggio → POST /dashboard/join_trip
+   ============================================================================ #}
+{% extends "layout.html" %}
+
+{% block content %}
+
+{# Avviso che non ci sono viaggi attivi #}
+<div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    Nessun viaggio attivo al momento.
+</div>
+
+{# Due colonne uguali affiancate su desktop, impilate su mobile #}
+<div class="row g-4">
+
+    {# ── CARD: CREA VIAGGIO ──────────────────────────────────────────────── #}
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="bi bi-airplane-fill me-2"></i>Crea un nuovo viaggio
+                </h2>
+
+                {# POST a create_trip() → crea viaggio + promuove l'utente ad admin #}
+                <form method="POST" action="/dashboard/create_trip">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Nome viaggio</label>
+                        <input type="text" name="nome_viaggio" class="form-control"
+                               placeholder="Es. Giro Europa" required>
+                    </div>
+
+                    {# Date affiancate con Bootstrap row/col #}
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Data partenza</label>
+                            <input type="date" name="data_partenza" class="form-control" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Data fine</label>
+                            {# app.py verifica che data_fine > data_partenza #}
+                            <input type="date" name="data_fine" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Descrizione itinerario</label>
+                        <textarea name="descrizione_itinerario" class="form-control"
+                                  rows="3" placeholder="Tappe previste..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus-circle me-1"></i>Crea viaggio e diventa Admin
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# ── CARD: UNISCITI A UN VIAGGIO ─────────────────────────────────────── #}
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="bi bi-key-fill me-2"></i>Unisciti a un viaggio
+                </h2>
+
+                {# POST a join_trip() → cerca il viaggio per uid_invito e aggiunge l'utente #}
+                <form method="POST" action="/dashboard/join_trip">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Codice Invito</label>
+                        {# Il codice è sempre 8 caratteri maiuscoli, es. "A1B2C3D4" #}
+                        <input type="text" name="uid_invito" class="form-control form-control-lg"
+                               placeholder="Es. A1B2C3D4" required
+                               style="font-family: monospace; letter-spacing: 2px;">
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100 fw-bold">
+                        <i class="bi bi-door-open me-1"></i>Partecipa
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

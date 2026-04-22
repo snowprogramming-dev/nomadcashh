@@ -1,0 +1,329 @@
+{# ============================================================================
+   dashboard_trip.html — Dashboard principale viaggio attivo (Bootstrap 5)
+   ============================================================================
+   Variabili ricevute dal contesto (app.py → route dashboard()):
+     viaggio, is_admin, spese, partecipanti, totale, quota,
+     situazioni, users_options, datetime
+
+   Layout Bootstrap: .row con .col-md-8 (spese) e .col-md-4 (riepilogo)
+   ============================================================================ #}
+{% extends "layout.html" %}
+
+{% block content %}
+
+{# ── BANNER VIAGGIO ─────────────────────────────────────────────────────────── #}
+<div class="trip-banner {% if is_admin %}admin-mode{% endif %} mb-4">
+    <span class="trip-badge">
+        {% if is_admin %}<i class="bi bi-shield-fill me-1"></i>Admin Control
+        {% else %}<i class="bi bi-map me-1"></i>In Viaggio{% endif %}
+    </span>
+    <h1 class="fs-2 fw-bold mb-1 mt-2">{{ viaggio.nome_viaggio }}</h1>
+    <div class="opacity-75 small">
+        <i class="bi bi-calendar3 me-1"></i>{{ viaggio.data_partenza }} &nbsp;→&nbsp; {{ viaggio.data_fine }}
+    </div>
+    <div class="fst-italic mt-3 pt-3" style="border-top: 1px solid rgba(255,255,255,0.2);">
+        {{ viaggio.descrizione_itinerario or 'Nessun itinerario inserito.' }}
+    </div>
+    <div class="invite-code">
+        <i class="bi bi-key me-1"></i>Codice Invito: <b>{{ viaggio.uid_invito }}</b>
+    </div>
+</div>
+
+
+{# ── LAYOUT A DUE COLONNE (8/4) ─────────────────────────────────────────────── #}
+<div class="row g-4">
+
+    {# ════════════════════════════════
+       COLONNA SINISTRA — Spese
+    ════════════════════════════════ #}
+    <div class="col-md-8">
+
+        {# ── CARD: AGGIUNGI SPESA ─────────────────────────────────────────── #}
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="bi bi-plus-circle me-2"></i>Aggiungi una spesa
+                </h2>
+
+                <form method="POST" action="/spese/add">
+
+                    {# Riga 1: chi ha pagato + descrizione #}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Acquistato da</label>
+                            <select name="payer" class="form-select">
+                                {% for u in users_options %}
+                                    <option value="{{ u.email }}"
+                                        {% if u.email == current_user.email %}selected{% endif %}>
+                                        {{ u.nome or u.email }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Descrizione</label>
+                            <input type="text" name="testo" class="form-control" required
+                                   placeholder="Es. Cena al ristorante">
+                        </div>
+                    </div>
+
+                    {# Riga 2: importo + categoria + data #}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Importo (€)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">€</span>
+                                <input type="number" step="0.01" min="0.01" name="importo"
+                                       class="form-control" required placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Categoria</label>
+                            <select name="categoria" class="form-select">
+                                <option>Benzina</option>
+                                <option>Hotel</option>
+                                <option>Cibo</option>
+                                <option>Supermercato</option>
+                                <option>Trasporti</option>
+                                <option>Biglietti/Attrazioni</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Data spesa</label>
+                            <input type="date" name="data" class="form-control"
+                                   value="{{ datetime.now().date() }}" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send me-1"></i>Aggiungi spesa
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {# ── CARD: LISTA SPESE ────────────────────────────────────────────── #}
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="bi bi-receipt me-2"></i>Acquisti Viaggio
+                </h2>
+
+                {% if not spese %}
+                    <p class="text-muted">Nessuna spesa registrata.</p>
+                {% else %}
+                    {% for spesa in spese %}
+                    <div class="expense-item {% if spesa.email_utente == current_user.email %}is-me{% endif %}">
+                        <div>
+                            <div class="exp-title">{{ spesa.testo_messaggio }}</div>
+                            <div class="exp-meta">
+                                <i class="bi bi-person me-1"></i>
+                                <b>{% if spesa.email_utente == current_user.email %}Tu{% else %}{{ spesa.nome }}{% endif %}</b>
+                                &nbsp;·&nbsp;
+                                <i class="bi bi-tag me-1"></i>{{ spesa.categoria }}
+                                &nbsp;·&nbsp;
+                                <i class="bi bi-calendar2 me-1"></i>{{ spesa.data_spesa }}
+                            </div>
+                        </div>
+                        <div class="exp-amount">
+                            <span class="fw-bold">€{{ "%.2f"|format(spesa.importo) }}</span>
+
+                            {# Badge "Saldato" per le spese già chiuse #}
+                            {% if spesa.pagata %}
+                                <span class="badge-paid">Saldato ✅</span>
+                            {% endif %}
+
+                            {# Bottone elimina: solo per le proprie spese non ancora saldate #}
+                            {% if spesa.email_utente == current_user.email and not spesa.pagata %}
+                            <form method="POST" action="/spese/delete/{{ spesa.id_spesa }}"
+                                  style="display: inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger border-0"
+                                        onclick="return confirm('Eliminare questa spesa?');">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+    </div>{# fine col-md-8 #}
+
+
+    {# ════════════════════════════════
+       COLONNA DESTRA — Riepilogo + Admin
+    ════════════════════════════════ #}
+    <div class="col-md-4">
+
+        {# ── CARD: RIEPILOGO E BILANCIO ───────────────────────────────────── #}
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="bi bi-bar-chart-fill me-2"></i>Riepilogo e Bilancio
+                </h2>
+
+                {% if totale == 0 %}
+                    <div class="alert alert-success d-flex align-items-center gap-2 mb-0" role="alert">
+                        <i class="bi bi-check-circle-fill"></i>
+                        Tutte le spese sono saldate.
+                    </div>
+                {% else %}
+
+                    {# Totale e quota affiancati #}
+                    <div class="row text-center mb-3">
+                        <div class="col-6">
+                            <div class="text-muted small">Totale da dividere</div>
+                            <div class="fs-4 fw-bold text-dark">€{{ "%.2f"|format(totale) }}</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small">Quota pro capite</div>
+                            <div class="fs-4 fw-bold text-dark">€{{ "%.2f"|format(quota) }}</div>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+
+                    <h6 class="fw-semibold mb-2">Situazioni individuali</h6>
+
+                    {# bilancio > 0 = in DEBITO (ha pagato meno della quota)
+                       bilancio < 0 = in CREDITO (ha pagato più della quota) #}
+                    {% for sit in situazioni %}
+                        {% if sit.bilancio > 0 %}
+                            <div class="alert alert-danger py-2 mb-2 small" role="alert">
+                                <i class="bi bi-arrow-down-circle me-1"></i>
+                                <b>{{ sit.email }}</b> — debito di €{{ "%.2f"|format(sit.bilancio) }}
+                            </div>
+                        {% elif sit.bilancio < 0 %}
+                            <div class="alert alert-success py-2 mb-2 small" role="alert">
+                                <i class="bi bi-arrow-up-circle me-1"></i>
+                                <b>{{ sit.email }}</b> — credito di €{{ "%.2f"|format(sit.bilancio|abs) }}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-secondary py-2 mb-2 small" role="alert">
+                                <i class="bi bi-dash-circle me-1"></i>
+                                <b>{{ sit.email }}</b> — in pari
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+
+                    {# ── Bottoni admin ────────────────────────────────────── #}
+                    {% if is_admin %}
+                        <div class="d-grid gap-2 mt-3">
+
+                            {# Salda tutti i conti: chiude tutto senza calcoli #}
+                            <form method="POST" action="/spese/settle">
+                                <button type="submit" class="btn btn-warning w-100 fw-semibold"
+                                        onclick="return confirm('Salda tutti i conti senza divisione equa. Sicuro?');">
+                                    <i class="bi bi-cash-stack me-1"></i>💸 Salda tutti i conti
+                                </button>
+                            </form>
+
+                            {# Divisione equa: calcola + eventuale commissione €0.50/pers se > €300 #}
+                            <form method="POST" action="/spese/divisione_equa">
+                                <button type="submit" class="btn w-100 fw-semibold text-white"
+                                        style="background-color: #0d9488; border-color: #0d9488;"
+                                        onclick="return confirm('Applica la divisione equa. Se il totale supera €300 verrà aggiunta una commissione di €0.50 per partecipante. Continuare?');">
+                                    <i class="bi bi-calculator me-1"></i>⚖️ Divisione Equa
+                                </button>
+                            </form>
+                        </div>
+
+                        <p class="text-muted mt-2 mb-0" style="font-size: 0.72rem; text-align: center;">
+                            <b>Salda tutti i conti</b> chiude senza calcoli &nbsp;·&nbsp;
+                            <b>Divisione Equa</b> ricalcola (commissione €0.50/pers. se &gt; €300)
+                        </p>
+                    {% else %}
+                        <p class="text-muted small mt-3 mb-0">
+                            <i class="bi bi-lock me-1"></i>Solo l'admin può saldare i conti.
+                        </p>
+                    {% endif %}
+
+                {% endif %}
+            </div>
+        </div>
+
+
+        {# ── CARD: GESTIONE PARTECIPANTI (solo admin) ─────────────────────── #}
+        {% if is_admin %}
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">
+                    <i class="bi bi-people-fill me-2"></i>Gestione Partecipanti
+                </h2>
+
+                {% for p in partecipanti %}
+                <div class="part-item">
+                    <div>
+                        <div class="fw-semibold">
+                            {{ p.nome or p.email }}
+                            {% if p.email == current_user.email %}
+                                <span class="text-muted small">(Tu)</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted small">
+                            {{ p.email }}
+                            {% if p.ruolo == 'admin' %}
+                                <span class="badge bg-warning text-dark ms-1">Admin</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Bottoni gestione: non mostrati per se stessi #}
+                    {% if p.email != current_user.email %}
+                    <div class="d-flex gap-1">
+                        {% if p.ruolo != 'admin' %}
+                        <form method="POST" action="/admin/promote/{{ p.email }}">
+                            <button type="submit" class="btn btn-sm btn-outline-success" title="Promuovi ad admin">
+                                <i class="bi bi-arrow-up-circle"></i>
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="/admin/demote/{{ p.email }}">
+                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Degrada a partecipante">
+                                <i class="bi bi-arrow-down-circle"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        <form method="POST" action="/admin/remove/{{ p.email }}"
+                              onsubmit="return confirm('Rimuovere l\'utente?');">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Rimuovi dal viaggio">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                {# Sezione invito forzato #}
+                <h6 class="fw-semibold mt-3 mb-2">
+                    <i class="bi bi-person-plus me-1"></i>Invita forzatamente
+                </h6>
+                <form method="POST" action="/admin/add_participant">
+                    <div class="mb-2">
+                        <input type="email" name="email" class="form-control form-control-sm"
+                               placeholder="Email registrata" required>
+                    </div>
+                    <div class="mb-2">
+                        <select name="ruolo" class="form-select form-select-sm">
+                            <option value="partecipante">Partecipante</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-plus-lg me-1"></i>Aggiungi
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{# fine col-md-4 #}
+
+</div>{# fine .row #}
+
+{% endblock %}
