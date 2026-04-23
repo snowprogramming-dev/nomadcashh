@@ -658,4 +658,4 @@ def add_participant():
 if __name__ == "__main__":
     # debug=True: ricarica automaticamente il server ad ogni modifica del codice.
     # NON usare debug=True in produzione (espone il debugger interattivo).
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", debug=True, port=5000)

@@ -25,10 +25,18 @@ Stili: la classe CSS "auth-container" centra le due card affiancate.
     <!-- Bootstrap Icons — stesso set usato nel resto dell'app -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
+        }
+    </script>
+
     <style>
         /* --- VARIABILI GLOBALI (Design Tokens) --- 
            Definiamo i colori principali qui per poterli cambiare facilmente in tutto il documento.
-           Verde per la crescita, Arancione per l'energia, Bianco/Slate per la pulizia.
+           Verde per la crescita, Arancione per l'energia, Bianco per la pulizia.
         */
         :root {
             --primary-green: #22c55e;
