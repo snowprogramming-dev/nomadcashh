@@ -18,13 +18,33 @@ Nota sull'engine:
     per tutta la connessione al DB.
 """
 
+import uuid
+from datetime import datetime
+from sqlalchemy import text
+
 import database
 
 # Riferimento all'engine SQLAlchemy; condiviso con partecipanti.py
 engine = database.engine
 
-from sqlalchemy import text
-from datetime import datetime
+# --- Helper per query ripetitive ---
+def _execute(query_str, params=None):
+    with engine.begin() as conn:
+        return conn.execute(text(query_str), params or {})
+
+def _fetch_one(query_str, params=None):
+    with engine.connect() as conn:
+        res = conn.execute(text(query_str), params or {}).mappings().fetchone()
+        return dict(res) if res else None
+
+def _fetch_all(query_str, params=None):
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(text(query_str), params or {}).mappings().fetchall()]
+
+def _scalar(query_str, params=None):
+    with engine.connect() as conn:
+        return conn.execute(text(query_str), params or {}).scalar()
+# -----------------------------------
 
 
 # =============================================================================
@@ -65,20 +85,14 @@ class Viaggio:
         Dopo l'inserimento, memorizza in self.id_viaggio l'ID assegnato dal DB
         (utile per usare subito l'oggetto senza rififare query).
         """
-        import uuid
         # Genera il codice invito solo se non è già stato impostato
-        if not self.uid_invito:
-            self.uid_invito = str(uuid.uuid4())[:8].upper()
+        self.uid_invito = self.uid_invito or str(uuid.uuid4())[:8].upper()
 
-        query = text("""INSERT INTO viaggi (nome_viaggio, data_partenza, data_fine, descrizione_itinerario, uid_invito)
-                        VALUES (:n, :p, :f, :d, :uid)""")
-        with engine.begin() as conn:
-            result = conn.execute(query, {
-                "n": self.nome, "p": self.data_p, "f": self.data_f,
-                "d": self.descrizione, "uid": self.uid_invito
-            })
-            # lastrowid è l'ID auto-increment appena generato dal DB
-            self.id_viaggio = result.lastrowid
+        self.id_viaggio = _execute(
+            """INSERT INTO viaggi (nome_viaggio, data_partenza, data_fine, descrizione_itinerario, uid_invito)
+               VALUES (:n, :p, :f, :d, :uid)""",
+            {"n": self.nome, "p": self.data_p, "f": self.data_f, "d": self.descrizione, "uid": self.uid_invito}
+        ).lastrowid
 
     def read(self):
         """
@@ -87,20 +101,15 @@ class Viaggio:
         Returns:
             dict | None: Dati del viaggio come dizionario, None se non trovato.
         """
-        query = text("SELECT * FROM viaggi WHERE id_viaggio = :id")
-        with engine.connect() as conn:
-            res = conn.execute(query, {"id": self.id_viaggio}).mappings().fetchone()
-            return dict(res) if res else None
+        return _fetch_one("SELECT * FROM viaggi WHERE id_viaggio = :id", {"id": self.id_viaggio})
 
     def update(self):
         """
         Aggiorna nome e descrizione del viaggio nel database.
         Usa i valori correnti di self.nome e self.descrizione.
         """
-        query = text("""UPDATE viaggi SET nome_viaggio = :n, descrizione_itinerario = :d
-        WHERE id_viaggio = :id """)
-        with engine.begin() as conn:
-            conn.execute(query, {"n": self.nome, "d": self.descrizione, "id": self.id_viaggio})
+        _execute("UPDATE viaggi SET nome_viaggio = :n, descrizione_itinerario = :d WHERE id_viaggio = :id",
+                 {"n": self.nome, "d": self.descrizione, "id": self.id_viaggio})
 
     def delete(self):
         """
@@ -112,15 +121,10 @@ class Viaggio:
         Raises:
             Exception: Se ci sono spese associate al viaggio.
         """
-        with engine.begin() as conn:
-            # Controlla se esistono spese legate a questo viaggio prima di procedere
-            check = conn.execute(
-                text("SELECT COUNT(*) FROM spese WHERE id_viaggio=:id"),
-                {"id": self.id_viaggio}
-            ).scalar()
-            if check > 0:
-                raise Exception("Cancellazione bloccata: esistono spese collegate.")
-            conn.execute(text("DELETE FROM viaggi WHERE id_viaggio=:id"), {"id": self.id_viaggio})
+        # Controlla se esistono spese legate a questo viaggio prima di procedere
+        if _scalar("SELECT COUNT(*) FROM spese WHERE id_viaggio=:id", {"id": self.id_viaggio}) > 0:
+            raise Exception("Cancellazione bloccata: esistono spese collegate.")
+        _execute("DELETE FROM viaggi WHERE id_viaggio=:id", {"id": self.id_viaggio})
 
     def find_viaggio_attivo_utente(self, email):
         """
@@ -138,17 +142,12 @@ class Viaggio:
         Returns:
             dict | None: Dati del viaggio come dizionario, None se non trovato.
         """
-        oggi = datetime.now().date()
-        query = text("""
-            SELECT v.*
-            FROM viaggi v
+        return _fetch_one("""
+            SELECT v.* FROM viaggi v
             JOIN partecipanti p ON v.id_viaggio = p.id_viaggio
             WHERE p.email = :email AND v.data_fine >= :oggi
             ORDER BY v.data_partenza ASC LIMIT 1
-        """)
-        with engine.connect() as conn:
-            res = conn.execute(query, {"oggi": oggi, "email": email}).mappings().fetchone()
-            return dict(res) if res else None
+        """, {"oggi": datetime.now().date(), "email": email})
 
     def find_viaggio_attivo(self):
         """
@@ -160,11 +159,8 @@ class Viaggio:
         Returns:
             dict | None: Dati del viaggio, None se non trovato.
         """
-        oggi = datetime.now().date()
-        query = text("SELECT * FROM viaggi WHERE data_fine >= :oggi ORDER BY data_partenza ASC LIMIT 1")
-        with engine.connect() as conn:
-            res = conn.execute(query, {"oggi": oggi}).mappings().fetchone()
-            return dict(res) if res else None
+        return _fetch_one("SELECT * FROM viaggi WHERE data_fine >= :oggi ORDER BY data_partenza ASC LIMIT 1",
+                          {"oggi": datetime.now().date()})
 
     def find_by_uid(self, uid):
         """
@@ -176,10 +172,7 @@ class Viaggio:
         Returns:
             dict | None: Dati del viaggio, None se il codice non esiste.
         """
-        query = text("SELECT * FROM viaggi WHERE uid_invito = :uid")
-        with engine.connect() as conn:
-            res = conn.execute(query, {"uid": uid}).mappings().fetchone()
-            return dict(res) if res else None
+        return _fetch_one("SELECT * FROM viaggi WHERE uid_invito = :uid", {"uid": uid})
 
 
 # =============================================================================
@@ -222,19 +215,11 @@ class Utente:
             bool: True se creato con successo, False se l'email è già registrata
                   o si verifica un altro errore DB.
         """
-        query = text("""
-            INSERT INTO utenti (email, nome, avatar, admin)
-            VALUES (:e, :n, :av, :a)
-        """)
         try:
-            with engine.begin() as conn:
-                result = conn.execute(query, {
-                    "e": self.email,
-                    "n": self.nome,
-                    "av": self.avatar,
-                    "a": self.is_admin
-                })
-                self.id_utente = result.lastrowid
+            self.id_utente = _execute(
+                "INSERT INTO utenti (email, nome, avatar, admin) VALUES (:e, :n, :av, :a)",
+                {"e": self.email, "n": self.nome, "av": self.avatar, "a": self.is_admin}
+            ).lastrowid
             return True
         except Exception:
             # Fallisce se l'email è già in uso (UNIQUE constraint sul DB)
@@ -247,10 +232,7 @@ class Utente:
         Returns:
             dict | None: Dati dell'utente, None se non trovato.
         """
-        query = text("SELECT * FROM utenti WHERE id_utente = :id")
-        with engine.connect() as conn:
-            res = conn.execute(query, {"id": self.id_utente}).mappings().fetchone()
-            return dict(res) if res else None
+        return _fetch_one("SELECT * FROM utenti WHERE id_utente = :id", {"id": self.id_utente})
 
     def find_by_email(self):
         """
@@ -262,10 +244,7 @@ class Utente:
         Returns:
             dict | None: Dati dell'utente (incluso il flag admin), None se non trovato.
         """
-        query = text("SELECT * FROM utenti WHERE email = :e")
-        with engine.connect() as conn:
-            res = conn.execute(query, {"e": self.email}).mappings().fetchone()
-            return dict(res) if res else None
+        return _fetch_one("SELECT * FROM utenti WHERE email = :e", {"e": self.email})
 
     def delete(self):
         """
@@ -277,19 +256,9 @@ class Utente:
         Raises:
             Exception: Se l'utente ha spese collegate.
         """
-        with engine.begin() as conn:
-            check = conn.execute(
-                text("SELECT COUNT(*) FROM spese WHERE id_utente = :id"),
-                {"id": self.id_utente}
-            ).scalar()
-
-            if check > 0:
-                raise Exception("Impossibile eliminare: utente con spese registrate.")
-
-            conn.execute(
-                text("DELETE FROM utenti WHERE id_utente = :id"),
-                {"id": self.id_utente}
-            )
+        if _scalar("SELECT COUNT(*) FROM spese WHERE id_utente = :id", {"id": self.id_utente}) > 0:
+            raise Exception("Impossibile eliminare: utente con spese registrate.")
+        _execute("DELETE FROM utenti WHERE id_utente = :id", {"id": self.id_utente})
 
     def diventa_admin(self):
         """
@@ -302,17 +271,9 @@ class Utente:
             Exception: Se l'utente è già admin di un altro viaggio.
         """
         # Legge lo stato attuale prima di modificare
-        with engine.connect() as conn:
-            is_admin = conn.execute(
-                text("SELECT admin FROM utenti WHERE email = :e"),
-                {"e": self.email}
-            ).scalar()
-            if is_admin:
-                raise Exception("Operazione non consentita: l'utente è già admin di un viaggio.")
-
-        query = text("UPDATE utenti SET admin = 1 WHERE email = :e")
-        with engine.begin() as conn:
-            conn.execute(query, {"e": self.email})
+        if _scalar("SELECT admin FROM utenti WHERE email = :e", {"e": self.email}):
+            raise Exception("Operazione non consentita: l'utente è già admin di un viaggio.")
+        _execute("UPDATE utenti SET admin = 1 WHERE email = :e", {"e": self.email})
 
     def diventa_non_admin(self):
         """
@@ -324,17 +285,9 @@ class Utente:
         Raises:
             Exception: Se l'utente non è admin.
         """
-        with engine.connect() as conn:
-            is_admin = conn.execute(
-                text("SELECT admin FROM utenti WHERE email = :e"),
-                {"e": self.email}
-            ).scalar()
-            if not is_admin:
-                raise Exception("Operazione non consentita: l'utente non è admin.")
-
-        query = text("UPDATE utenti SET admin = 0 WHERE email = :e")
-        with engine.begin() as conn:
-            conn.execute(query, {"e": self.email})
+        if not _scalar("SELECT admin FROM utenti WHERE email = :e", {"e": self.email}):
+            raise Exception("Operazione non consentita: l'utente non è admin.")
+        _execute("UPDATE utenti SET admin = 0 WHERE email = :e", {"e": self.email})
 
 
 # =============================================================================
@@ -388,22 +341,12 @@ class Spesa:
         Dopo l'inserimento, self.id_spesa viene aggiornato con l'ID
         assegnato dal DB (utile per riferimenti immediati).
         """
-        query = text("""
-            INSERT INTO spese (id_viaggio, email_utente, testo_messaggio,
-                               importo, categoria, data_spesa, pagata)
-            VALUES (:iv, :eu, :tm, :im, :ca, :ds, :pa)
-        """)
-        with engine.begin() as conn:
-            result = conn.execute(query, {
-                "iv": self.id_viaggio,
-                "eu": self.email_utente,
-                "tm": self.testo_messaggio,
-                "im": self.importo,
-                "ca": self.categoria,
-                "ds": self.data_spesa,
-                "pa": self.pagata
-            })
-            self.id_spesa = result.lastrowid
+        self.id_spesa = _execute(
+            """INSERT INTO spese (id_viaggio, email_utente, testo_messaggio, importo, categoria, data_spesa, pagata)
+               VALUES (:iv, :eu, :tm, :im, :ca, :ds, :pa)""",
+            {"iv": self.id_viaggio, "eu": self.email_utente, "tm": self.testo_messaggio,
+             "im": self.importo, "ca": self.categoria, "ds": self.data_spesa, "pa": self.pagata}
+        ).lastrowid
 
     def read(self):
         """
@@ -412,10 +355,7 @@ class Spesa:
         Returns:
             dict | None: Dati della spesa, None se non trovata.
         """
-        query = text("SELECT * FROM spese WHERE id_spesa = :id")
-        with engine.connect() as conn:
-            res = conn.execute(query, {"id": self.id_spesa}).mappings().fetchone()
-            return dict(res) if res else None
+        return _fetch_one("SELECT * FROM spese WHERE id_spesa = :id", {"id": self.id_spesa})
 
     def delete(self):
         """
@@ -427,18 +367,10 @@ class Spesa:
         Raises:
             Exception: Se la spesa risulta già pagata nel DB.
         """
-        with engine.begin() as conn:
-            # Controlla lo stato PRIMA di eliminare
-            check = conn.execute(
-                text("SELECT pagata FROM spese WHERE id_spesa = :id"),
-                {"id": self.id_spesa}
-            ).scalar()
-            if check:  # Se pagata=1, blocca l'operazione
-                raise Exception("Cancellazione bloccata: la spesa è già stata saldata.")
-            conn.execute(
-                text("DELETE FROM spese WHERE id_spesa = :id"),
-                {"id": self.id_spesa}
-            )
+        # Controlla lo stato PRIMA di eliminare
+        if _scalar("SELECT pagata FROM spese WHERE id_spesa = :id", {"id": self.id_spesa}):
+            raise Exception("Cancellazione bloccata: la spesa è già stata saldata.")
+        _execute("DELETE FROM spese WHERE id_spesa = :id", {"id": self.id_spesa})
 
     def segna_come_pagata(self):
         """
@@ -448,13 +380,8 @@ class Spesa:
         lista del viaggio). Aggiorna anche i campi Python locali.
         """
         oggi = datetime.now().date()
-        query = text("""
-            UPDATE spese
-            SET pagata = 1, data_pagamento = :oggi
-            WHERE id_spesa = :id
-        """)
-        with engine.begin() as conn:
-            conn.execute(query, {"oggi": oggi, "id": self.id_spesa})
+        _execute("UPDATE spese SET pagata = 1, data_pagamento = :oggi WHERE id_spesa = :id",
+                 {"oggi": oggi, "id": self.id_spesa})
         # Aggiorna anche i valori locali dell'istanza Python
         self.pagata = True
         self.data_pagamento = oggi
@@ -472,29 +399,14 @@ class Spesa:
             - divisione_equa() → calcola prima i bilanci, poi segna tutto
 
         Returns:
-            int: Numero di spese saldare (0 se non c'era nulla da saldare).
+            int: Numero di spese saldate (0 se non c'era nulla da saldare).
         """
         oggi = datetime.now().date()
-
         # Controlla prima quante spese sono aperte
-        query_check = text("""
-            SELECT COUNT(*) FROM spese
-            WHERE id_viaggio = :iv AND pagata = 0
-        """)
-        query_salda = text("""
-            UPDATE spese
-            SET pagata = 1, data_pagamento = :oggi
-            WHERE id_viaggio = :iv AND pagata = 0
-        """)
-        with engine.connect() as conn:
-            count = conn.execute(query_check, {"iv": self.id_viaggio}).scalar() or 0
-
-        if count == 0:
-            return 0  # Nessuna spesa da saldare — esce subito
-
-        with engine.begin() as conn:
-            conn.execute(query_salda, {"oggi": oggi, "iv": self.id_viaggio})
-
+        count = _scalar("SELECT COUNT(*) FROM spese WHERE id_viaggio = :iv AND pagata = 0", {"iv": self.id_viaggio}) or 0
+        if count > 0:
+            _execute("UPDATE spese SET pagata = 1, data_pagamento = :oggi WHERE id_viaggio = :iv AND pagata = 0",
+                     {"oggi": oggi, "iv": self.id_viaggio})
         return count  # Restituisce il numero di spese chiuse, utile per il flash message
 
     def numero_viaggiatori(self):
@@ -508,13 +420,7 @@ class Spesa:
         Returns:
             int: Numero totale di partecipanti al viaggio.
         """
-        query = text("""
-            SELECT COUNT(*)
-            FROM partecipanti
-            WHERE id_viaggio = :iv
-        """)
-        with engine.connect() as conn:
-            return conn.execute(query, {"iv": self.id_viaggio}).scalar()
+        return _scalar("SELECT COUNT(*) FROM partecipanti WHERE id_viaggio = :iv", {"iv": self.id_viaggio})
 
     def divisione_equa(self):
         """
@@ -560,16 +466,10 @@ class Spesa:
             bilancio == 0 → pari
         """
         oggi = datetime.now().date()
-
+        
         # ── STEP 1: Totale spese non saldate ──────────────────────────────────
-        query_totale_iniziale = text("""
-            SELECT COALESCE(SUM(importo), 0)
-            FROM spese
-            WHERE id_viaggio = :iv AND pagata = 0
-        """)
-        with engine.connect() as conn:
-            totale_iniziale = float(conn.execute(query_totale_iniziale, {"iv": self.id_viaggio}).scalar())
-
+        totale_iniziale = float(_scalar("SELECT COALESCE(SUM(importo), 0) FROM spese WHERE id_viaggio = :iv AND pagata = 0",
+                                        {"iv": self.id_viaggio}) or 0)
         # Nessuna spesa da dividere: esci subito senza fare nulla
         if totale_iniziale == 0:
             return {}
@@ -578,86 +478,46 @@ class Spesa:
         commissione_applicata = False
         if totale_iniziale > 300.0:
             # Recupera TUTTI i partecipanti (non solo chi ha spese aperte)
-            query_partecipanti = text("""
-                SELECT email FROM partecipanti WHERE id_viaggio = :iv
-            """)
-            with engine.connect() as conn:
-                partecipanti_rows = conn.execute(query_partecipanti, {"iv": self.id_viaggio}).fetchall()
-
+            partecipanti = _fetch_all("SELECT email FROM partecipanti WHERE id_viaggio = :iv", {"iv": self.id_viaggio})
             # Inserisce una riga di commissione per ciascun partecipante.
             # pagata=0 → viene inclusa nel calcolo della quota qui sotto.
             # Categoria "Commissione" → distinguibile visivamente nella lista spese.
-            query_ins_commissione = text("""
-                INSERT INTO spese (id_viaggio, email_utente, testo_messaggio,
-                                   importo, categoria, data_spesa, pagata)
-                VALUES (:iv, :eu, :tm, :im, :ca, :ds, 0)
-            """)
-            with engine.begin() as conn:
-                for row in partecipanti_rows:
-                    conn.execute(query_ins_commissione, {
-                        "iv": self.id_viaggio,
-                        "eu": row[0],                              # email del partecipante
-                        "tm": "Commissione di gestione divisione equa",
-                        "im": 0.50,                               # 50 centesimi fissi
-                        "ca": "Commissione",
-                        "ds": oggi
-                    })
+            for p in partecipanti:
+                _execute("""INSERT INTO spese (id_viaggio, email_utente, testo_messaggio, importo, categoria, data_spesa, pagata)
+                            VALUES (:iv, :eu, :tm, :im, :ca, :ds, 0)""",
+                         {"iv": self.id_viaggio, "eu": p["email"], "tm": "Commissione di gestione divisione equa",
+                          "im": 0.50, "ca": "Commissione", "ds": oggi})
             commissione_applicata = True
 
         # ── STEP 3: Calcolo divisione equa (include commissioni se aggiunte) ──
-        # Raggruppa per utente: somma di tutto ciò che ha pagato finora (non saldato)
-        query_spese = text("""
-            SELECT email_utente, SUM(importo) AS totale_pagato
-            FROM spese
-            WHERE id_viaggio = :iv AND pagata = 0
-            GROUP BY email_utente
-        """)
         # Totale aggiornato (può includere le commissioni appena inserite)
-        query_totale = text("""
-            SELECT COALESCE(SUM(importo), 0)
-            FROM spese
-            WHERE id_viaggio = :iv AND pagata = 0
-        """)
-        with engine.connect() as conn:
-            totale = float(conn.execute(query_totale, {"iv": self.id_viaggio}).scalar())
-            righe = conn.execute(query_spese, {"iv": self.id_viaggio}).mappings().fetchall()
-
+        totale = float(_scalar("SELECT COALESCE(SUM(importo), 0) FROM spese WHERE id_viaggio = :iv AND pagata = 0",
+                               {"iv": self.id_viaggio}) or 0)
+        # Raggruppa per utente: somma di tutto ciò che ha pagato finora (non saldato)
+        righe = _fetch_all("SELECT email_utente, SUM(importo) AS totale_pagato FROM spese WHERE id_viaggio = :iv AND pagata = 0 GROUP BY email_utente",
+                           {"iv": self.id_viaggio})
+        
         if not righe:
-            # Non dovrebbe mai succedere qui, ma per sicurezza
             return {}
 
         # Numero di utenti che hanno spese aperte (= divisore per la quota)
-        n = len(righe)
-        quota = totale / n  # Quanto dovrebbe aver speso ognuno in media
-
+        quota = totale / len(righe)
+        
         # Costruisce il dizionario dei bilanci
         # bilancio positivo = ha pagato MENO della quota → è in DEBITO verso gli altri
         # bilancio negativo = ha pagato PIÙ della quota → è in CREDITO
-        bilanci = {}
-        for riga in righe:
-            bilanci[riga["email_utente"]] = round(float(riga["totale_pagato"]) - float(quota), 2)
+        bilanci = {r["email_utente"]: round(float(r["totale_pagato"]) - quota, 2) for r in righe}
 
         # ── STEP 4: Salda tutto — spese ordinarie + commissioni ─────────────
-        query_salda = text("""
-            UPDATE spese
-            SET pagata = 1, data_pagamento = :oggi
-            WHERE id_viaggio = :iv AND pagata = 0
-        """)
-        with engine.begin() as conn:
-            conn.execute(query_salda, {"oggi": oggi, "iv": self.id_viaggio})
+        _execute("UPDATE spese SET pagata = 1, data_pagamento = :oggi WHERE id_viaggio = :iv AND pagata = 0",
+                 {"oggi": oggi, "iv": self.id_viaggio})
 
         # ── STEP 5: Reset admin se il viaggio è terminato ────────────────────
         # Controlla se la data di fine viaggio è già passata E non ci sono più spese aperte.
         # In quel caso revoca automaticamente i poteri admin per "chiudere" il viaggio.
-        query_viaggio = text("SELECT data_fine FROM viaggi WHERE id_viaggio = :iv")
-        query_spese_aperte = text("""
-            SELECT COUNT(*) FROM spese
-            WHERE id_viaggio = :iv AND pagata = 0
-        """)
-        with engine.connect() as conn:
-            data_fine = conn.execute(query_viaggio, {"iv": self.id_viaggio}).scalar()
-            spese_aperte = conn.execute(query_spese_aperte, {"iv": self.id_viaggio}).scalar()
-
+        data_fine = _scalar("SELECT data_fine FROM viaggi WHERE id_viaggio = :iv", {"iv": self.id_viaggio})
+        spese_aperte = _scalar("SELECT COUNT(*) FROM spese WHERE id_viaggio = :iv AND pagata = 0", {"iv": self.id_viaggio})
+        
         # Revoca l'admin usando self.email_utente (deve essere l'email dell'admin chiamante)
         if data_fine and oggi >= data_fine and spese_aperte == 0:
             admin = Utente(email=self.email_utente)
